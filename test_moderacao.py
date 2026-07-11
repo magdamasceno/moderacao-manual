@@ -21,7 +21,6 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Entradas do Caso")
-    titulo = st.text_input("Título da Reclamação:")
     descricao = st.text_area("Descrição/Relato do Cliente:", height=200)
     resposta = st.text_area("Resposta Pública da Empresa:", height=150)
     replica = st.text_area("Réplica do Consumidor (Opcional):", height=100)
