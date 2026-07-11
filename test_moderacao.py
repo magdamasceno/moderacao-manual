@@ -1,22 +1,25 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 import json
 
-# Configuração visual da página
+# Configuração visual
 st.set_page_config(page_title="Simulador de Moderação RA", layout="wide")
 
 st.title("🛡️ Simulador de Moderação Reversa - Reclame AQUI")
-st.caption("Analise o risco de negativa e gere respostas blindadas com base no manual oficial.")
+st.caption("Analise o risco de negativa com base no manual oficial.")
 
-# Área para colar a chave de API (Você pode deixar uma fixa no código se preferir)
-api_key = st.sidebar.text_input("Insira sua Gemini API Key:", type="password")
+# Coloque sua chave direto aqui entre as aspas para testar sem precisar digitar na tela
+MINHA_CHAVE_FIXA = "" 
 
-if api_key:
-    genai.configure(api_key=api_key)
+client = None
+
+if MINHA_CHAVE_FIXA:
+    client = genai.Client(api_key=MINHA_CHAVE_FIXA)
 else:
-    st.warning("⚠️ Insira sua Gemini API Key na barra lateral para ativar o sistema.")
+    api_key = st.sidebar.text_input("Insira sua Gemini API Key:", type="password")
+    if api_key:
+        client = genai.Client(api_key=api_key)
 
-# Criando o formulário na tela
 col1, col2 = st.columns(2)
 
 with col1:
@@ -30,52 +33,38 @@ with col1:
 with col2:
     st.subheader("Análise e Veredito da IA")
     
-    if botao_analisar and api_key:
-        with st.spinner("Analisando o manual do Reclame AQUI..."):
-            
-            prompt_sistema = f"""
-            Você é um Auditor de Moderação do Reclame AQUI. Sua tarefa é prever se um pedido de moderação na categoria "A empresa não violou o direito do cliente" ou "Este é um caso de fraude" será ACEITO ou NEGADO.
+    if botao_analisar:
+        if client is None:
+            st.error("⚠️ Por favor, insira sua API Key na barra lateral esquerda para rodar a análise.")
+        else:
+            with st.spinner("Analisando critérios do Reclame AQUI..."):
+                prompt_sistema = f"""
+                Você é um Auditor de Moderação do Reclame AQUI[cite: 1]. Sua tarefa é prever se um pedido de moderação na categoria "A empresa não violou o direito do cliente" será ACEITO ou NEGADO[cite: 1].
 
-            [DIRETRIZES DE SUCESSO]
-            - ACEITO se a empresa provar matematicamente/via regulamento que seguiu o padrão e o cliente apenas demonstrar insatisfação subjetiva.
-            - ACEITO se o cliente admitir que perdeu prazos (ex: testar após 7 dias) ou causou o próprio problema (ex: trânsito).
-            - ACEITO se a resposta citar cláusulas exatas que desmentem a premissa do cliente sem margem para dupla interpretação.
+                [REGRAS DO MANUAL DO RA]
+                - NEGADO (CO06 - Divergência) se houver bate-boca de fatos, datas ou valores conflitantes que o cliente rebateu na réplica/avaliação[cite: 1]. O RA não julga mérito nem analisa documentos[cite: 1].
+                - NEGADO se o cliente mencionar qualquer Falha no Atendimento (atendentes, chat fora do ar, demora)[cite: 1].
+                - ACEITO se o cliente causou o problema sozinho, perdeu prazos legais explicitamente ou se a resposta da empresa trouxe regras e cálculos matemáticos incontestáveis e o cliente fez réplica puramente de descontentamento subjetivo[cite: 1].
 
-            [DIRETRIZES DE REJEIÇÃO]
-            - NEGADO (CO06 - Divergência) se houver bate-boca de fatos não comprováveis publicamente (datas ou valores conflitantes).
-            - NEGADO se o cliente mencionar "Falha no Atendimento" (demora, chat que caiu).
+                DADOS DO CASO ATUAL:
+                - DESCRIÇÃO: {descricao}
+                - RESPOSTA DA EMPRESA: {resposta}
+                - RÉPLICA DO CONSUMIDOR: {replica}
 
-            DADOS DO CASO ATUAL:
-            - TÍTULO: {titulo}
-            - DESCRIÇÃO: {descricao}
-            - RESPOSTA DA EMPRESA: {resposta}
-            - RÉPLICA DO CONSUMIDOR: {replica}
-
-            Retorne estritamente um formato JSON válido (sem markdown ou texto extra):
-            {{
-                "veredito_previso": "ACEITO" ou "NEGADO",
-                "carimbo_provavel": "CO01" ou "CO06" ou "Nenhum",
-                "chance_sucesso_percentual": 85,
-                "justificativa": "Sua explicação detalhada aqui."
-            }}
-            """
-            
-            try:
-                model = genai.GenerativeModel('gemini-1.5-pro')
-                response = model.generate_content(prompt_sistema)
+                Escreva sua resposta de forma direta e estruturada:
+                1. VEREDITO PREVISTO: (Escreva ACEITO ou NEGADO em letras maiúsculas)
+                2. MOTIVO / CARIMBO PROVÁVEL: (Diga qual regra ou carimbo como CO06 ou CO01 se aplica)[cite: 1]
+                3. EXPLICAÇÃO: (Explique de forma curta e prática o porquê com base no texto inserido)
+                """
                 
-                # Limpa marcações de código markdown se o modelo colocar
-                texto_limpo = response.text.replace("```json", "").replace("```", "").strip()
-                dados = json.loads(texto_limpo)
-                
-                # Exibindo os resultados visualmente
-                if dados["veredito_previso"] == "ACEITO":
-                    st.success(f"🎉 Veredito: {dados['veredito_previso']} ({dados['chance_sucesso_percentual']}% de chance)")
-                else:
-                    st.error(f"❌ Veredito: {dados['veredito_previso']} ({dados['chance_sucesso_percentual']}% de risco de rejeição)")
+                try:
+                    # Nova sintaxe oficial da biblioteca google-genai usando o modelo flash (mais rápido)
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt_sistema,
+                    )
                     
-                st.metric(label="Carimbo Provável do RA", value=dados["carimbo_provavel"])
-                st.info(f"**Justificativa Analítica:** {dados['justificativa']}")
-                
-            except Exception as e:
-                st.error(f"Erro ao processar análise: {e}")
+                    st.markdown(response.text)
+                    
+                except Exception as e:
+                    st.error(f"Erro na comunicação com a API do Gemini: {e}")
